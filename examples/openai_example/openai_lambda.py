@@ -44,6 +44,6 @@ def chat(
     ai_response_message = response.choices[0].message
 
     metadata[_HISTORY_KEY] = json.dumps(
-        messages_to_process + [ai_response_message.model_dump_json()])
+        messages_to_process + [ai_response_message.model_dump(include={"role", "content"})])
 
     return [ai_response_message.content], metadata
