@@ -1,3 +1,4 @@
+from typing import Sequence
 import logging
 import json
 import runloop
@@ -25,22 +26,21 @@ _SYSTEM_MSG = SystemMessage(
             "a question."
 )
 
-_HISTORY_KEY = "history"
-
-
 _logger = logging.getLogger(__name__)
 _chat = ChatOpenAI(temperature=0)
 
 
-@runloop.loop
+class ChatKv(BaseModel):
+    messages: Sequence[dict] = []
+
+
+@runloop.function
 def langchain_chat(
-    metadata: dict[str, str],
-    inputs: list[str]
-) -> tuple[list[str], dict[str, str]]:
-    _logger.debug(f"handle_input metadata={metadata} input={inputs}")
-    messages_list = messages_from_dict(
-        json.loads(metadata.get(_HISTORY_KEY, "[]")))
-    human_message = HumanMessage(content=inputs[0])
+    next_message: str,
+    session: runloop.Session[ChatKv],
+) -> str:
+    messages_list = messages_from_dict(session.kv.messages)
+    human_message = HumanMessage(content=next_message)
 
     messages = [
         *messages_list,
@@ -48,10 +48,8 @@ def langchain_chat(
     ]
 
     ai_response = _chat([_SYSTEM_MSG] + messages)
-
     _logger.debug(f"got response={ai_response}")
 
-    metadata[_HISTORY_KEY] = json.dumps(
-        messages_to_dict(messages + [ai_response]))
+    session.kv.messages = messages_to_dict(messages + [ai_response])
 
-    return [ai_response.content], metadata
+    return ai_response.content

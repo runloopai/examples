@@ -2,7 +2,10 @@ import json
 import logging
 
 import openai
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionUserMessageParam, ChatCompletionAssistantMessageParam
+
 import runloop
+from pydantic import BaseModel
 
 """
 The openai app implementation.
@@ -24,26 +27,26 @@ _model = "gpt-3.5-turbo-16k"
 _client = openai.OpenAI()
 
 
-@runloop.loop
-def chat(
-    metadata: dict[str, str],
-    inputs: list[str]
-) -> tuple[list[str], dict[str, str]]:
-    logger.debug(f"handle_input metadata={metadata} input={inputs}")
-    next_user_line = {"role": "user", "content": inputs[0]}
-    existing_non_system_messages = json.loads(metadata.get(_HISTORY_KEY, "[]"))
+class ChatKv(BaseModel):
+    messages: list[ChatCompletionMessageParam] = []
 
-    messages_to_process = existing_non_system_messages + [next_user_line]
+
+@runloop.function
+def chat(
+    next_message: str,
+    session: runloop.Session[ChatKv],
+) -> str:
+    next_user_line = ChatCompletionUserMessageParam(
+        content=next_message, role="user")
+    session.kv.messages.append(next_user_line)
+
     response = _client.chat.completions.create(
         model=_model,
-        messages=[_SYSTEM_MSG] + messages_to_process,
+        messages=[_SYSTEM_MSG] + session.kv.messages,
     )
 
-    logger.debug(f"got response={response}")
-    # TODO: determine how to propagate errors
     ai_response_message = response.choices[0].message
+    session.kv.messages.append(ChatCompletionAssistantMessageParam(
+        content=ai_response_message.content, role="assistant"))
 
-    metadata[_HISTORY_KEY] = json.dumps(
-        messages_to_process + [ai_response_message.model_dump(include={"role", "content"})])
-
-    return [ai_response_message.content], metadata
+    return ai_response_message.content

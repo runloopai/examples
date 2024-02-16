@@ -1,12 +1,16 @@
 import runloop
+from pydantic import BaseModel
 
 """
 The echo app implementation does not actually talk to an LLM but validates I/O and scaffolding.
 """
 
 
-@runloop.loop
-def echo(metadata: dict[str, str], input: list[str]) -> tuple[list[str], dict[str, str]]:
-    sequence_num = int(metadata.get("sequence", "0"))
-    metadata["sequence"] = str(sequence_num + 1)
-    return [f"{sequence_num}-{input[0]}!"], metadata
+class EchoKv(BaseModel):
+    sequence: int = 0
+
+
+@runloop.function
+def echo(echo: str, session: runloop.Session[EchoKv]) -> str:
+    session.kv.sequence += 1
+    return f"{session.kv.sequence}-{echo}!"
